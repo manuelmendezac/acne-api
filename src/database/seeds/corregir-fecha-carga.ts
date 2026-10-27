@@ -62,13 +62,13 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   await dataSource.initialize();
 
-  const jornadas = (await dataSource.query(
+  const jornadas = (await dataSource.query<JornadaRow[]>(
     `SELECT id, turno_codigo, iniciada_en, finalizada_en, casos_revisados, notas
        FROM jornadas_trabajo WHERE es_sintetico = false ORDER BY iniciada_en`,
-  )) as JornadaRow[];
-  const casos = (await dataSource.query(
+  ));
+  const casos = (await dataSource.query<CaseRow[]>(
     `SELECT id, paciente_id, creado_en, notas FROM casos WHERE es_sintetico = false ORDER BY creado_en`,
-  )) as CaseRow[];
+  ));
 
   const mananas = jornadas.filter((j) => j.turno_codigo === 'manana');
   const tardes = jornadas.filter((j) => j.turno_codigo === 'tarde');
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     starts.set(code, Number(m[1]) * 60 + Number(m[2]));
   }
 
-  const codes = (await dataSource.query(`SELECT id, codigo_caso FROM casos WHERE es_sintetico = false`)) as Array<{ id: string; codigo_caso: string }>;
+  const codes = (await dataSource.query<Array<{ id: string; codigo_caso: string }>>(`SELECT id, codigo_caso FROM casos WHERE es_sintetico = false`));
   const codeOf = new Map(codes.map((c) => [c.id, c.codigo_caso]));
   const plan = casos.map((c) => {
     const code = codeOf.get(c.id) as string;
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
   await dataSource.transaction(async (m) => {
     for (const p of plan) {
       // El paciente se creó segundos antes que el caso: se conserva esa distancia.
-      const pac = (await m.query(`SELECT creado_en FROM pacientes WHERE id = $1`, [p.c.paciente_id])) as Array<{ creado_en: Date }>;
+      const pac = (await m.query<Array<{ creado_en: Date }>>(`SELECT creado_en FROM pacientes WHERE id = $1`, [p.c.paciente_id]));
       const delta = p.c.creado_en.getTime() - (pac[0]?.creado_en ?? p.c.creado_en).getTime();
       await m.query(`UPDATE pacientes SET creado_en = $2 WHERE id = $1`, [
         p.c.paciente_id,

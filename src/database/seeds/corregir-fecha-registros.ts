@@ -36,18 +36,18 @@ async function main(): Promise<void> {
   );
 
   await dataSource.initialize();
-  const cases = (await dataSource.query(
+  const cases = (await dataSource.query<Row[]>(
     `SELECT id, paciente_id, creado_en FROM casos WHERE es_sintetico = false`,
-  )) as Row[];
+  ));
   const timings = new Map(
     (
-      (await dataSource.query(
+      (await dataSource.query<Row[]>(
         `SELECT caso_id, t0, t1 FROM cronometrajes_revision WHERE modo_estudio_codigo = 'postest'`,
-      )) as Row[]
+      ))
     ).map((t) => [t['caso_id'] as string, t]),
   );
 
-  const maxImg = ((await dataSource.query(`SELECT max(creado_en) m FROM imagenes_caso`)) as Row[])[0]?.['m'];
+  const maxImg = ((await dataSource.query<Row[]>(`SELECT max(creado_en) m FROM imagenes_caso`)))[0]?.['m'];
   if (ms(maxImg) < ms('2026-10-21T00:00:00Z')) {
     throw new Error('Los registros ya parecen estar en el 19/10: no se repite.');
   }

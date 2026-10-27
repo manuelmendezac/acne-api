@@ -5,6 +5,8 @@ import {
   lacksAcneEvidence,
   missingRequiredShots,
   shotLabel,
+  type AcneCheck,
+  type ShotKey,
 } from './capture';
 
 /**
@@ -61,8 +63,8 @@ describe('describeMissingShots', () => {
 describe('lacksAcneEvidence', () => {
   const shot = (
     shotKey: 'general' | 'perfil_derecho' | 'perfil_izquierdo',
-    acneCheck: 'acne' | 'piel_sana' | 'indeterminado' | null,
-  ) => ({
+    acneCheck: AcneCheck | null,
+  ): { shotKey: ShotKey; acneCheck: AcneCheck | null } => ({
     shotKey,
     acneCheck,
   });

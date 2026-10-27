@@ -21,12 +21,12 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   await dataSource.initialize();
 
-  const rows = (await dataSource.query(
+  const rows = (await dataSource.query<Array<{ id: string; codigo_caso: string; ref: string | null; notas: string | null; diag_id: string; cls: string }>>(
     `SELECT c.id, c.codigo_caso, c.clase_iga_referencia ref, c.notas, d.id diag_id, d.clase_iga_codigo cls
        FROM casos c JOIN diagnosticos d ON d.caso_id = c.id AND d.modo_estudio_codigo = 'postest'
       WHERE c.es_sintetico = false
         AND (c.clase_iga_referencia IS NULL OR COALESCE(c.notas,'') LIKE '%${MARK}%')`,
-  )) as Array<{ id: string; codigo_caso: string; ref: string | null; notas: string | null; diag_id: string; cls: string }>;
+  ));
 
   const changes = rows.filter((r) => r.ref !== r.cls);
   console.log(`${apply ? '== APLICAR ==' : '== SIMULACIÓN =='} ${rows.length} casos elegibles, ${changes.length} cambian.`);

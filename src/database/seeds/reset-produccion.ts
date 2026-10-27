@@ -88,16 +88,16 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   await dataSource.initialize();
 
-  const rows = (await dataSource.query(
+  const rows = (await dataSource.query<Array<{ table_name: string }>>(
     `SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`,
-  )) as Array<{ table_name: string }>;
+  ));
   const wipe = rows.map((r) => r.table_name).filter((t) => !KEEP.has(t));
 
   console.log(apply ? '== MODO APLICAR ==' : '== SIMULACIÓN (agregue --apply para ejecutar) ==');
   const counts: Record<string, number> = {};
   for (const t of wipe) {
-    const res = (await dataSource.query(`SELECT COUNT(*)::int AS n FROM "${t}"`)) as Array<{ n: number }>;
+    const res = (await dataSource.query<Array<{ n: number }>>(`SELECT COUNT(*)::int AS n FROM "${t}"`));
     const n = res[0]?.n ?? 0;
     counts[t] = n;
     console.log(` vaciar ${t.padEnd(36)} ${n} filas`);
@@ -105,10 +105,10 @@ async function main(): Promise<void> {
 
   // Un TRUNCATE ... CASCADE arrastra cualquier tabla que apunte a las vaciadas: si una de catálogo
   // apuntara a usuarios la perderíamos. Se comprueba antes de tocar nada.
-  const fks = (await dataSource.query(
+  const fks = (await dataSource.query<Array<{ child: string; parent: string }>>(
     `SELECT conrelid::regclass::text AS child, confrelid::regclass::text AS parent
        FROM pg_constraint WHERE contype = 'f'`,
-  )) as Array<{ child: string; parent: string }>;
+  ));
   const clean = (s: string): string => s.replace(/"/g, '').replace(/^public\./, '');
   const wiped = new Set(wipe);
   // `preguntas_anamnesis.actualizada_por` es ON DELETE SET NULL: se anula a mano y se trunca SIN
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
   const dir = join(__dirname, '..', '..', '..', '..', 'acne-infra', 'backups');
   mkdirSync(dir, { recursive: true });
   const dump: Record<string, unknown[]> = {};
-  for (const t of wipe) dump[t] = (await dataSource.query(`SELECT * FROM "${t}"`)) as unknown[];
+  for (const t of wipe) dump[t] = (await dataSource.query<unknown[]>(`SELECT * FROM "${t}"`));
   const backupFile = join(dir, `previo-limpieza-${stamp}.json`);
   writeFileSync(backupFile, JSON.stringify({ generadoEn: stamp, conteos: counts, tablas: dump }, null, 1));
   console.log(`\nRespaldo: ${backupFile}`);
