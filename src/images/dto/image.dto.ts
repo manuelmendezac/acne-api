@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn } from 'class-validator';
 
-import { SHOT_KEYS, type ShotKey } from 'src/common/domain';
+import { ACNE_CHECKS, SHOT_KEYS, type AcneCheck, type ShotKey } from 'src/common/domain';
 
 /**
  * Clinical image as returned to the portal.
@@ -29,10 +29,18 @@ export class CaseImageDto {
       'sintéticas del seeder, que no lo siguieron.',
   })
   shotKey: ShotKey | null;
+  @ApiProperty({
+    nullable: true,
+    enum: ACNE_CHECKS,
+    type: String,
+    description:
+      'Lo que la segunda opinión vio al subir la foto. El caso no se analiza si ninguna toma ' +
+      'obligatoria dice `acne`. Null: no se verificó (regla apagada o foto anterior).',
+  })
+  acneCheck: AcneCheck | null;
   @ApiProperty() createdAt: string;
   @ApiProperty({ description: 'URL firmada con TTL de 15 minutos (RNF-02).' }) url: string;
 }
-
 
 /**
  * What a successful upload returns.
@@ -48,7 +56,6 @@ export class UploadedImageDto extends CaseImageDto {
   })
   warnings: string[];
 }
-
 
 /** Body of `POST /images/:id/shot`: which view of the protocol an uploaded photograph is. */
 export class RelabelImageDto {

@@ -442,6 +442,11 @@ export interface components {
             yaw_ratio?: number | null;
             /** @description Comparación con las demás tomas del caso. Null solo si la imagen se rechazó. */
             identity?: components["schemas"]["IdentityCheckOut"] | null;
+            /**
+             * Acne Check
+             * @description Lo que la segunda opinión vio en una imagen admitida, con SECOND_OPINION_REQUIRE_ACNE activo. acne-api lo guarda y no analiza un caso en el que ninguna fotografía muestre acné. Null cuando la regla está apagada o la imagen se rechazó.
+             */
+            acne_check?: ("acne" | "piel_sana" | "otra_condicion" | "indeterminado") | null;
             /** Latency Ms */
             latency_ms: number;
             /**

@@ -5,9 +5,10 @@
  * next rather than what went wrong. The engine's own `reason` is appended when it has one: it is
  * specific to the image ("está de espaldas a la cámara") in a way a fixed catalogue cannot be.
  *
- * Nothing here mentions acne, lesions or severity, and it must stay that way: the message is shown
- * during intake, which happens in the pretest condition too, where the model must leave no trace
- * (RF-TR-01).
+ * Nothing here mentions lesions or severity. The two codes about acne (`otra_condicion`,
+ * `acne_sin_verificar`) only appear with `SECOND_OPINION_REQUIRE_ACNE` on in the engine, a rule the
+ * research team asked for on 27/10/2026; the system is only used in the postest (the pretest is
+ * transcribed from paper), so they cannot reach the pretest (RF-TR-01).
  */
 
 const SUBJECT_MESSAGES: Readonly<Record<string, string>> = {
@@ -18,6 +19,10 @@ const SUBJECT_MESSAGES: Readonly<Record<string, string>> = {
   otro: 'La imagen no es la fotografía de un rostro. Tome la foto directamente a la cara del paciente.',
   // A face IS there, but the photograph cannot be used: a second person, blur, darkness, too small.
   rostro_humano: 'La fotografía no sirve para evaluar el rostro.',
+  // The second opinion saw another condition (vitiligo, melasma…): the reason carries its name.
+  otra_condicion: 'La fotografía no corresponde a acné; parece otra condición de la piel.',
+  acne_sin_verificar:
+    'No se pudo comprobar si la fotografía muestra acné. Vuelva a subirla en unos segundos.',
 };
 
 const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
@@ -31,11 +36,11 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
 
 /** Message for an image the record must not accept. */
 export function describeRejection(subject: string, reason: string): string {
-  const base =
-    SUBJECT_MESSAGES[subject] ??
-    'La imagen no sirve como fotografía clínica facial.';
+  const base = SUBJECT_MESSAGES[subject] ?? 'La imagen no sirve como fotografía clínica facial.';
   const detail = reason.trim();
-  return detail === '' ? base : `${base} ${detail}`;
+  if (detail === '') return base;
+  // For another condition the engine's reason is the condition's name, not a sentence.
+  return subject === 'otra_condicion' ? `${base} Se observa: ${detail}.` : `${base} ${detail}`;
 }
 
 /** Warnings for an image that IS accepted but could have been taken better. */

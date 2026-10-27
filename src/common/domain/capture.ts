@@ -116,6 +116,45 @@ export function describeMissingShots(missing: ReadonlyArray<ShotKey>): string {
 }
 
 /**
+ * What the engine's second opinion saw in an admitted photograph (`acne_check` of `/image/screen`).
+ * `otra_condicion` never reaches the record: such an upload is refused.
+ */
+export const ACNE_CHECKS = ['acne', 'piel_sana', 'indeterminado'] as const;
+export type AcneCheck = (typeof ACNE_CHECKS)[number];
+
+export function isAcneCheck(value: unknown): value is AcneCheck {
+  return typeof value === 'string' && (ACNE_CHECKS as readonly string[]).includes(value);
+}
+
+/**
+ * Whether the case must not be analysed because none of its required shots shows acne.
+ *
+ * Reads the latest photograph of each required shot, the ones `requestForCase` sends. Only blocks
+ * when EVERY one of them was checked and none says `acne`: a shot without a reading (older upload,
+ * rule switched off in the engine) means nothing was claimed, and the case stays analysable.
+ *
+ * @param images in chronological order, as `findByCase` returns them.
+ */
+export function lacksAcneEvidence(
+  images: ReadonlyArray<{ shotKey: ShotKey | null; acneCheck: AcneCheck | null }>,
+): boolean {
+  const latest = new Map<ShotKey, AcneCheck | null>();
+  for (const image of images) {
+    if (image.shotKey !== null && REQUIRED_SHOT_KEYS.includes(image.shotKey)) {
+      latest.set(image.shotKey, image.acneCheck);
+    }
+  }
+  const readings = [...latest.values()];
+  if (readings.length === 0 || readings.some((reading) => reading === null)) return false;
+  return !readings.includes('acne');
+}
+
+/** The 400 text when no required shot shows acne. */
+export const NO_ACNE_EVIDENCE_MESSAGE =
+  'Ninguna de las fotografías del caso muestra acné. Al menos una toma debe mostrar las lesiones ' +
+  'para poder analizar el caso: repita la que corresponda a la zona afectada.';
+
+/**
  * Upload cap per capture session.
  *
  * The mobile upload endpoint is public — it is authorised by the QR token alone — so the blast

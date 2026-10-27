@@ -140,6 +140,12 @@ export interface ImageScreenResponse {
    * "not verified".
    */
   identity?: IdentityCheck | null;
+  /**
+   * What the second opinion saw in an admitted photograph, with `SECOND_OPINION_REQUIRE_ACNE` on.
+   * Stored on the image; a case where no required shot says `acne` is not analysed. Null or absent
+   * when the rule is off or the image was refused.
+   */
+  acne_check?: 'acne' | 'piel_sana' | 'otra_condicion' | 'indeterminado' | null;
   latency_ms: number;
   model_backend: 'stub' | 'torch' | 'gemini';
 }

@@ -19,6 +19,7 @@ import {
   viewsForSuggestion,
   buildCaseReading,
   describeMissingShots,
+  NO_ACNE_EVIDENCE_MESSAGE,
   describeRule,
   isIgaClass,
   isShotKey,
@@ -38,10 +39,7 @@ import { AiInference } from './ai-inference.entity';
 import { fromSecondOpinionColumns, toSecondOpinionColumns } from './second-opinion';
 import { ChosenReading } from './chosen-reading.entity';
 import { AiEngineClient } from './ai-engine.client';
-import {
-  AssessmentDetail,
-  type AssessmentDetailType,
-} from './assessment-detail.entity';
+import { AssessmentDetail, type AssessmentDetailType } from './assessment-detail.entity';
 import { InferenceAssessment } from './inference-assessment.entity';
 import { InferenceMember } from './inference-member.entity';
 import { InferenceProbability } from './inference-probability.entity';
@@ -126,6 +124,9 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     await assertCaseActive(this.dataSource.manager, caseId);
     const missing = await this.imagesService.missingRequiredShots(caseId);
     if (missing.length > 0) throw new BadRequestException(describeMissingShots(missing));
+    if (await this.imagesService.lacksAcneEvidence(caseId)) {
+      throw new BadRequestException(NO_ACNE_EVIDENCE_MESSAGE);
+    }
 
     if (!force) {
       const existing = await this.repository.findOne({
@@ -160,6 +161,9 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     await assertCaseActive(this.dataSource.manager, caseId);
     const missing = await this.imagesService.missingRequiredShots(caseId);
     if (missing.length > 0) throw new BadRequestException(describeMissingShots(missing));
+    if (await this.imagesService.lacksAcneEvidence(caseId)) {
+      throw new BadRequestException(NO_ACNE_EVIDENCE_MESSAGE);
+    }
 
     const images = await this.imagesService.findByCase(caseId, false);
     const latestPerShot = new Map<string, (typeof images)[number]>();
@@ -208,7 +212,10 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
         'Esa lectura fue reemplazada por un análisis más reciente; elija sobre el análisis vigente.',
       );
     }
-    const memberTag = dto.memberTag === undefined || dto.memberTag === null || dto.memberTag === '' ? null : dto.memberTag;
+    const memberTag =
+      dto.memberTag === undefined || dto.memberTag === null || dto.memberTag === ''
+        ? null
+        : dto.memberTag;
     if (memberTag !== null && !(inference.members ?? []).some((m) => m.tag === memberTag)) {
       throw new BadRequestException(`La toma no tiene una lectura del modelo «${memberTag}».`);
     }
@@ -222,7 +229,10 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
         caseId,
         inferenceId: inference.id,
         memberTag,
-        reason: dto.reason === undefined || dto.reason === null || dto.reason.trim() === '' ? null : dto.reason.trim(),
+        reason:
+          dto.reason === undefined || dto.reason === null || dto.reason.trim() === ''
+            ? null
+            : dto.reason.trim(),
         userId,
         chosenAt: new Date(),
         withdrawnAt: null,
@@ -257,9 +267,12 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     const member =
       view === null || choice.memberTag === null
         ? null
-        : (view.inference.members ?? []).find((m) => m.tag === choice.memberTag) ?? null;
+        : ((view.inference.members ?? []).find((m) => m.tag === choice.memberTag) ?? null);
     const source = member ?? view?.inference ?? null;
-    const active = view !== null && view.inference.status === 'exitoso' && (choice.memberTag === null || member !== null);
+    const active =
+      view !== null &&
+      view.inference.status === 'exitoso' &&
+      (choice.memberTag === null || member !== null);
     return {
       inferenceId: choice.inferenceId,
       imageId: view?.imageId ?? '',
@@ -284,7 +297,11 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
    */
   async caseAnalysis(caseId: string): Promise<CaseAnalysisDto> {
     const [inferences, images] = await Promise.all([
-      this.repository.find({ where: { caseId }, order: { createdAt: 'ASC' }, relations: RELATIONS }),
+      this.repository.find({
+        where: { caseId },
+        order: { createdAt: 'ASC' },
+        relations: RELATIONS,
+      }),
       this.imagesService.findByCase(caseId, false),
     ]);
     const shotOf = new Map(images.map((image) => [image.id, image.shotKey]));
@@ -295,7 +312,11 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     for (const image of images) {
       const inference = latestPerImage.get(image.id);
       if (inference === undefined) continue;
-      views.push({ imageId: image.id, shotKey: shotOf.get(image.id) ?? null, inference: this.toDto(inference) });
+      views.push({
+        imageId: image.id,
+        shotKey: shotOf.get(image.id) ?? null,
+        inference: this.toDto(inference),
+      });
     }
 
     const done = views.filter((v) => v.inference.status === 'exitoso');
@@ -311,9 +332,13 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     const healthyViewsSetAside = healthySetAside.map((v) => v.imageId);
     const caseVerdict = caseVerdictOf(done.map((v) => v.inference.verdict));
     const counted = graded.filter(
-      (v) => v.shotKey !== null && REQUIRED_SHOT_KEYS.includes(v.shotKey) && v.inference.classProbs !== null,
+      (v) =>
+        v.shotKey !== null &&
+        REQUIRED_SHOT_KEYS.includes(v.shotKey) &&
+        v.inference.classProbs !== null,
     );
-    const pool = counted.length > 0 ? counted : graded.filter((v) => v.inference.classProbs !== null);
+    const pool =
+      counted.length > 0 ? counted : graded.filter((v) => v.inference.classProbs !== null);
 
     const verdict = aggregateViews(
       pool.map((v) => ({
@@ -337,7 +362,8 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
       const chosenMember =
         selection.memberTag === null
           ? null
-          : (chosenView?.inference.members ?? []).find((m) => m.tag === selection.memberTag) ?? null;
+          : ((chosenView?.inference.members ?? []).find((m) => m.tag === selection.memberTag) ??
+            null);
       verdict.igaClass = selection.igaClass;
       verdict.confidence = selection.confidence;
       verdict.classProbs = chosenMember?.classProbs ?? chosenView?.inference.classProbs ?? null;
@@ -348,7 +374,9 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
         `${labelOf(selection.shotKey)}` +
         (selection.memberTag === null ? ' (ensemble)' : ` (${selection.memberTag})`) +
         ` → ${IGA_LABELS[selection.igaClass].toLowerCase()}` +
-        (selection.reason !== null && selection.reason.trim() !== '' ? `. Motivo: ${selection.reason.trim()}` : '.');
+        (selection.reason !== null && selection.reason.trim() !== ''
+          ? `. Motivo: ${selection.reason.trim()}`
+          : '.');
     }
     const { igaClass, confidence, classProbs, agreement } = verdict;
 
@@ -398,7 +426,9 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
       noAcneViews,
       healthyViewsSetAside,
       completed: done.length,
-      pending: views.filter((v) => v.inference.status === 'pendiente' || v.inference.status === 'ejecutando').length,
+      pending: views.filter(
+        (v) => v.inference.status === 'pendiente' || v.inference.status === 'ejecutando',
+      ).length,
       failed: views.filter((v) => v.inference.status === 'fallido').length,
       views,
     };
@@ -557,7 +587,12 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
   private async execute(caseId: string, imageId: string): Promise<AiInference> {
     // Second line of defence against a malformed job: a TypeORM `where` built from undefined
     // values drops those conditions and would match an unrelated inference.
-    if (typeof caseId !== 'string' || caseId === '' || typeof imageId !== 'string' || imageId === '') {
+    if (
+      typeof caseId !== 'string' ||
+      caseId === '' ||
+      typeof imageId !== 'string' ||
+      imageId === ''
+    ) {
       throw new Error(
         `Trabajo de inferencia inválido (caseId="${caseId}", imageId="${imageId}"): se descarta ` +
           'sin tocar ninguna inferencia existente.',
@@ -616,7 +651,9 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     const prediction = graded ? result.prediction : null;
     const gags = graded ? result.gags_secondary : null;
     if (graded && (prediction === null || gags === null)) {
-      throw new Error(`El motor respondió «${verdict}» sin clase IGA ni GAGS: respuesta incompleta.`);
+      throw new Error(
+        `El motor respondió «${verdict}» sin clase IGA ni GAGS: respuesta incompleta.`,
+      );
     }
 
     // Cabecera e hijas en una sola transacción: una inferencia marcada exitosa cuyo vector de

@@ -39,6 +39,16 @@ describe('describeRejection', () => {
 
     expect(messages).not.toMatch(/acn[eé]|lesi[oó]n|grave|severo|leve|moderado|IGA|GAGS/i);
   });
+
+  it('names the other condition the second opinion saw, without grading anything', () => {
+    // Only with SECOND_OPINION_REQUIRE_ACNE on; the system is used in the postest only.
+    const message = describeRejection('otra_condicion', 'vitíligo');
+
+    expect(message).toMatch(/no corresponde a acné/i);
+    expect(message).toContain('Se observa: vitíligo.');
+    expect(message).not.toMatch(/grave|severo|leve|moderado|IGA|GAGS/i);
+    expect(describeRejection('acne_sin_verificar', '')).toMatch(/vuelva a subirla/i);
+  });
 });
 
 describe('describeIssues', () => {

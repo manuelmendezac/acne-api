@@ -9,6 +9,7 @@ import {
   IGA_ORDINAL,
   type CaseStatus,
   type IgaClass,
+  type AcneCheck,
   type ShotKey,
   type StudyMode,
 } from 'src/common/domain';
@@ -105,7 +106,7 @@ export class PatientHistoryService {
       this.dataSource.query<RawImage[]>(
         `SELECT im."id", im."caso_id" AS "caseId", im."tipo_mime" AS "mimeType",
                 im."ancho", im."alto", im."tamano_bytes" AS "sizeBytes", im."sha256",
-                im."cifrada", im."es_mapa_calor" AS "isHeatmap", im."toma_codigo" AS "shotKey",
+                im."cifrada", im."es_mapa_calor" AS "isHeatmap", im."toma_codigo" AS "shotKey", im."lectura_acne" AS "acneCheck",
                 im."creado_en" AS "createdAt"
            FROM "imagenes_caso" im
           WHERE im."caso_id" = ANY($1)
@@ -127,17 +128,15 @@ export class PatientHistoryService {
     const timeline: HistoryEntryDto[] = cases.map((row) => {
       const caseDiagnoses = diagnoses
         .filter((d) => d.caseId === row.id)
-        .map(
-          (d): HistoryDiagnosisDto => ({
-            id: d.id,
-            studyMode: d.studyMode,
-            igaClass: d.igaClass,
-            gagsScore: d.gagsScore,
-            notes: d.notes,
-            professional: d.professional,
-            createdAt: new Date(d.createdAt).toISOString(),
-          }),
-        );
+        .map((d): HistoryDiagnosisDto => ({
+          id: d.id,
+          studyMode: d.studyMode,
+          igaClass: d.igaClass,
+          gagsScore: d.gagsScore,
+          notes: d.notes,
+          professional: d.professional,
+          createdAt: new Date(d.createdAt).toISOString(),
+        }));
 
       const inference = inferences.find((i) => i.caseId === row.id);
 
@@ -156,14 +155,12 @@ export class PatientHistoryService {
         diagnoses: caseDiagnoses,
         timings: timings
           .filter((t) => t.caseId === row.id)
-          .map(
-            (t): HistoryTimingDto => ({
-              studyMode: t.studyMode,
-              t0: new Date(t.t0).toISOString(),
-              reviewMinutes: t.durationSeconds === null ? null : t.durationSeconds / 60,
-              valid: t.valid,
-            }),
-          ),
+          .map((t): HistoryTimingDto => ({
+            studyMode: t.studyMode,
+            t0: new Date(t.t0).toISOString(),
+            reviewMinutes: t.durationSeconds === null ? null : t.durationSeconds / 60,
+            valid: t.valid,
+          })),
         inference:
           inference === undefined
             ? null
@@ -177,22 +174,21 @@ export class PatientHistoryService {
               } satisfies HistoryInferenceDto),
         images: images
           .filter((im) => im.caseId === row.id)
-          .map(
-            (im): CaseImageDto => ({
-              id: im.id,
-              caseId: im.caseId,
-              mimeType: im.mimeType,
-              width: im.width,
-              height: im.height,
-              sizeBytes: Number(im.sizeBytes),
-              sha256: im.sha256,
-              encrypted: im.encrypted,
-              isHeatmap: im.isHeatmap,
-              shotKey: im.shotKey,
-              createdAt: new Date(im.createdAt).toISOString(),
-              url: this.signedUrl.buildUrl(apiPrefix, im.id, user.id),
-            }),
-          ),
+          .map((im): CaseImageDto => ({
+            id: im.id,
+            caseId: im.caseId,
+            mimeType: im.mimeType,
+            width: im.width,
+            height: im.height,
+            sizeBytes: Number(im.sizeBytes),
+            sha256: im.sha256,
+            encrypted: im.encrypted,
+            isHeatmap: im.isHeatmap,
+            shotKey: im.shotKey,
+            acneCheck: im.acneCheck,
+            createdAt: new Date(im.createdAt).toISOString(),
+            url: this.signedUrl.buildUrl(apiPrefix, im.id, user.id),
+          })),
         anamnesis: anamnesis.get(row.id) ?? null,
       };
     });
@@ -350,5 +346,6 @@ interface RawImage {
   encrypted: boolean;
   isHeatmap: boolean;
   shotKey: ShotKey | null;
+  acneCheck: AcneCheck | null;
   createdAt: string;
 }

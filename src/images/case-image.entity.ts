@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 
 import { ClinicalCase } from 'src/cases/case.entity';
-import type { HeadPose, ShotKey } from 'src/common/domain';
+import type { AcneCheck, HeadPose, ShotKey } from 'src/common/domain';
 
 /**
  * A clinical facial image attached to a case — table `imagenes_caso`.
@@ -79,6 +79,14 @@ export class CaseImage {
    */
   @Column({ type: 'varchar', length: 24, name: 'orientacion_detectada', nullable: true })
   pose: HeadPose | null;
+
+  /**
+   * What the engine's second opinion saw at upload (`acne`, `piel_sana`, `indeterminado`). The case
+   * is not analysed while no required shot says `acne` (`lacksAcneEvidence`). Null when nothing was
+   * checked: older photographs, or the rule switched off.
+   */
+  @Column({ type: 'varchar', length: 20, name: 'lectura_acne', nullable: true })
+  acneCheck: AcneCheck | null;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'creado_en' })
   createdAt: Date;

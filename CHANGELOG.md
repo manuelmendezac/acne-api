@@ -5,6 +5,16 @@ versionado con [SemVer](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Added — el caso no se analiza si ninguna foto muestra acné (27/10/2026)
+
+> Migración `LecturaAcneImagen1759000000000`: columna `imagenes_caso.lectura_acne`.
+
+- Al subir se guarda lo que la segunda opinión vio en la foto (`acne_check` del motor); la respuesta
+  de subida avisa cuando una toma no muestra acné y el DTO de imagen expone `acneCheck`.
+- `POST /inference/...` responde 400 si todas las tomas obligatorias tienen lectura y ninguna es
+  `acne` (`lacksAcneEvidence`). Una toma sin lectura no bloquea.
+- Mensajes de rechazo para `otra_condicion` (nombra la condición) y `acne_sin_verificar`.
+
 > **Tras actualizar, ejecute `pnpm migration:run`**: añade `InstruccionVistaGeneral1758700000000`,
 > `AnulacionCasos1758800000000` y `EstadoDiagnosticados1758900000000`.
 

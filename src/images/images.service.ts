@@ -19,10 +19,13 @@ import { SignedUrlService } from 'src/common/crypto/signed-url.service';
 import {
   checkSameSubject,
   checkShotView,
+  isAcneCheck,
   isHeadPose,
   isShotKey,
+  lacksAcneEvidence,
   missingRequiredShots,
   takesPartInIdentity,
+  type AcneCheck,
   type HeadPose,
   type IdentityReading,
   type ShotKey,
@@ -52,7 +55,14 @@ interface Screening {
   warnings: string[];
   pose: HeadPose | null;
   identity: IdentityReading | null;
+  /** What the engine's second opinion saw; null when it did not check. */
+  acneCheck: AcneCheck | null;
 }
+
+/** Upload warning for an admitted photograph in which the second opinion saw no acne. */
+const NO_ACNE_IN_SHOT_WARNING =
+  'En esta fotografía no se observa acné. Puede quedar si la zona no tiene lesiones, pero al menos ' +
+  'una de las tomas del caso debe mostrarlas para poder analizarlo.';
 
 export interface UploadedImage {
   buffer: Buffer;
@@ -119,10 +129,15 @@ export class ImagesService {
       false,
       shotKey,
       screening.pose,
+      screening.acneCheck,
     );
+    const acneWarning =
+      screening.acneCheck !== null && screening.acneCheck !== 'acne'
+        ? [NO_ACNE_IN_SHOT_WARNING]
+        : [];
     return {
       image,
-      warnings: [...screening.warnings, ...view.warnings, ...subject.warnings],
+      warnings: [...screening.warnings, ...view.warnings, ...subject.warnings, ...acneWarning],
     };
   }
 
@@ -197,7 +212,9 @@ export class ImagesService {
     mimeType: string,
     references: ScreenReference[] = [],
   ): Promise<Screening> {
-    if (!this.config.aiEngine.screenUploads) return { warnings: [], pose: null, identity: null };
+    if (!this.config.aiEngine.screenUploads) {
+      return { warnings: [], pose: null, identity: null, acneCheck: null };
+    }
     let verdict;
     try {
       verdict = await this.aiEngine.screenImage(buffer.toString('base64'), mimeType, references);
@@ -224,6 +241,7 @@ export class ImagesService {
     return {
       warnings: describeIssues(verdict.issues),
       pose: isHeadPose(verdict.pose) ? verdict.pose : null,
+      acneCheck: isAcneCheck(verdict.acne_check) ? verdict.acne_check : null,
       identity: {
         faceFound: verdict.identity.face_found,
         comparisons: verdict.identity.comparisons.flatMap((comparison) =>
@@ -254,13 +272,18 @@ export class ImagesService {
     isHeatmap: boolean,
     shotKey: ShotKey | null,
     pose: HeadPose | null,
+    acneCheck: AcneCheck | null = null,
   ): Promise<CaseImage> {
     const dimensions = readImageDimensions(plaintext);
     // The digest is of the PLAINTEXT, so integrity can be checked after decryption.
     const sha256 = this.encryption.sha256(plaintext);
     const key = `${isHeatmap ? 'heatmaps' : 'cases'}/${caseId}/${randomUUID()}.enc`;
 
-    await this.storage.put(key, this.encryption.encryptBuffer(plaintext), 'application/octet-stream');
+    await this.storage.put(
+      key,
+      this.encryption.encryptBuffer(plaintext),
+      'application/octet-stream',
+    );
 
     const image = this.repository.create({
       caseId,
@@ -276,6 +299,7 @@ export class ImagesService {
       uploadedBy: userId,
       shotKey,
       pose,
+      acneCheck,
     });
     return this.repository.save(image);
   }
@@ -414,6 +438,14 @@ export class ImagesService {
     return missingRequiredShots(images.map((image) => image.shotKey));
   }
 
+  /**
+   * Whether the case must not be analysed because none of its required shots shows acne, by what
+   * the second opinion saw at upload (`lacksAcneEvidence`).
+   */
+  async lacksAcneEvidence(caseId: string): Promise<boolean> {
+    return lacksAcneEvidence(await this.findByCase(caseId, false));
+  }
+
   async findByCase(caseId: string, includeHeatmaps = false): Promise<CaseImage[]> {
     const where = includeHeatmaps ? { caseId } : { caseId, isHeatmap: false };
     return this.repository.find({ where, order: { createdAt: 'ASC' } });
@@ -464,6 +496,7 @@ export class ImagesService {
       encrypted: image.encrypted,
       isHeatmap: image.isHeatmap,
       shotKey: image.shotKey,
+      acneCheck: image.acneCheck,
       createdAt: image.createdAt.toISOString(),
       url: this.signedUrl.buildUrl(apiPrefix, image.id, userId),
     };

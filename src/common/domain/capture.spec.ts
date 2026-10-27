@@ -2,6 +2,7 @@ import {
   REQUIRED_SHOT_KEYS,
   SHOT_DEFINITIONS,
   describeMissingShots,
+  lacksAcneEvidence,
   missingRequiredShots,
   shotLabel,
 } from './capture';
@@ -54,5 +55,48 @@ describe('describeMissingShots', () => {
 
   it('falls back to the key when a label is unknown', () => {
     expect(shotLabel('general')).toBe('Vista general');
+  });
+});
+
+describe('lacksAcneEvidence', () => {
+  const shot = (
+    shotKey: 'general' | 'perfil_derecho' | 'perfil_izquierdo',
+    acneCheck: 'acne' | 'piel_sana' | 'indeterminado' | null,
+  ) => ({
+    shotKey,
+    acneCheck,
+  });
+
+  it('blocks when every required shot was checked and none shows acne', () => {
+    expect(
+      lacksAcneEvidence([
+        shot('general', 'piel_sana'),
+        shot('perfil_derecho', 'piel_sana'),
+        shot('perfil_izquierdo', 'indeterminado'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('lets one photograph with acne be enough', () => {
+    expect(
+      lacksAcneEvidence([
+        shot('general', 'piel_sana'),
+        shot('perfil_derecho', 'acne'),
+        shot('perfil_izquierdo', 'piel_sana'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('does not block when a shot was never checked', () => {
+    // Older photographs or the rule switched off: nothing was claimed about them.
+    expect(lacksAcneEvidence([shot('general', 'piel_sana'), shot('perfil_derecho', null)])).toBe(
+      false,
+    );
+    expect(lacksAcneEvidence([])).toBe(false);
+  });
+
+  it('reads the latest photograph of each shot, the one the analysis sends', () => {
+    expect(lacksAcneEvidence([shot('general', 'acne'), shot('general', 'piel_sana')])).toBe(true);
+    expect(lacksAcneEvidence([shot('general', 'piel_sana'), shot('general', 'acne')])).toBe(false);
   });
 });
