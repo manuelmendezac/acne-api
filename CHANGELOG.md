@@ -5,6 +5,14 @@ versionado con [SemVer](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Added — tiempo de inferencia por caso (02/11/2026)
+
+- `GET /inference/times` (`leer_analisis`): por cada caso real, la suma de `latencia_ms` del motor
+  (filtro, segunda opinión y ensemble), la de los modelos del ensemble y el reloj de pared de la cola
+  (de que se encola la primera foto a que termina la última). Usa la última lectura exitosa de cada
+  foto y devuelve media, DE muestral, mediana, p95, mínimo y máximo de cada reloj.
+  `?hasta=ACN-2026-0030` cierra la muestra en ese código, inclusive (400 si no es un código de caso).
+
 ### Added — el caso no se analiza si ninguna foto muestra acné (27/10/2026)
 
 > Migración `LecturaAcneImagen1759000000000`: columna `imagenes_caso.lectura_acne`.

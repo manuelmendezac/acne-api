@@ -325,3 +325,66 @@ export class CaseAnalysisDto {
   })
   reading: AiAssessmentDto | null;
 }
+
+/**
+ * How long the AI took on one case: the "tiempo de inferencia por caso" of the thesis tables.
+ *
+ * Three clocks, because they answer different questions and mixing them is how a 0.8 s model ends
+ * up reported as a 16 s one (or the reverse). Only the latest successful reading of each image
+ * counts, so a forced re-analysis replaces the earlier timing instead of adding to it.
+ */
+export class CaseInferenceTimeDto {
+  @ApiProperty() caseId: string;
+  @ApiProperty() caseCode: string;
+  @ApiProperty({ description: 'Fotografías con inferencia exitosa que entran en la suma.' })
+  images: number;
+  @ApiProperty({
+    description:
+      'Suma de `latencia_ms` del motor sobre las fotografías del caso: filtro, verificación ' +
+      'previa (segunda opinión) y ensemble. Es lo que tarda el motor en devolver la clasificación.',
+  })
+  engineMs: number;
+  @ApiProperty({
+    description:
+      'Suma de la latencia de los modelos del ensemble. Es el costo de la clasificación CNN ' +
+      'sola; 0 en las tomas que el filtro detuvo antes de graduar.',
+  })
+  ensembleMs: number;
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    description:
+      'Reloj de pared: desde que se encoló la primera foto hasta que terminó la última. Incluye ' +
+      'la espera en la cola. Nulo si alguna lectura no tiene su trabajo de cola.',
+  })
+  wallMs: number | null;
+  @ApiProperty({ description: 'Fotografías en las que se consultó la segunda opinión.' })
+  secondOpinions: number;
+  @ApiProperty() analyzedAt: string;
+}
+
+/** Descriptive statistics of one per-case timing, in milliseconds. */
+export class TimingStatsDto {
+  @ApiProperty({ nullable: true, type: Number }) meanMs: number | null;
+  @ApiProperty({ nullable: true, type: Number, description: 'Desviación estándar muestral.' })
+  sdMs: number | null;
+  @ApiProperty({ nullable: true, type: Number }) medianMs: number | null;
+  @ApiProperty({ nullable: true, type: Number }) p95Ms: number | null;
+  @ApiProperty({ nullable: true, type: Number }) minMs: number | null;
+  @ApiProperty({ nullable: true, type: Number }) maxMs: number | null;
+}
+
+export class InferenceTimesDto {
+  @ApiProperty({ description: 'Casos reales (no sintéticos) con al menos una inferencia exitosa.' })
+  cases: number;
+  @ApiProperty({ description: 'Fotografías que entran en las sumas.' }) images: number;
+  @ApiProperty({ type: () => TimingStatsDto, description: 'Motor completo por caso.' })
+  engine: TimingStatsDto;
+  @ApiProperty({ type: () => TimingStatsDto, description: 'Solo el ensemble CNN por caso.' })
+  ensemble: TimingStatsDto;
+  @ApiProperty({ type: () => TimingStatsDto, description: 'Reloj de pared por caso, con cola.' })
+  wall: TimingStatsDto;
+  @ApiProperty({ nullable: true, type: Number, description: 'Motor completo por fotografía.' })
+  engineMeanPerImageMs: number | null;
+  @ApiProperty({ type: [CaseInferenceTimeDto] }) rows: CaseInferenceTimeDto[];
+}

@@ -50,6 +50,8 @@ import {
   CaseAnalysisViewDto,
   CaseReadingSelectionDto,
   ChooseReadingDto,
+  InferenceTimesDto,
+  TimingStatsDto,
 } from './dto/inference.dto';
 import { QUEUE_PROVIDER, type QueueProvider } from './queue/queue.provider';
 
@@ -821,6 +823,77 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /**
+   * Inference time per case, over every real case the engine has analysed.
+   *
+   * `latencyStats24h` answers "is the engine healthy right now"; this answers "how long does the
+   * AI take on a case", which is what the thesis reports. Per image only the latest successful
+   * reading counts — `DISTINCT ON` — so a forced re-analysis replaces its timing instead of
+   * doubling it. Synthetic cases are left out, as in every study figure.
+   *
+   * `until` closes the sample on a case code, inclusive: the study reports ACN-2026-0001 to
+   * ACN-2026-0030 and the later cases are not part of it. The codes are zero-padded, so comparing
+   * them as text orders them correctly.
+   */
+  async caseTimes(until: string | null = null): Promise<InferenceTimesDto> {
+    const rows = await this.dataSource.query<
+      Array<{
+        caseId: string;
+        caseCode: string;
+        images: number;
+        engineMs: number;
+        ensembleMs: number;
+        wallMs: number | null;
+        secondOpinions: number;
+        analyzedAt: Date;
+      }>
+    >(
+      `WITH "ultima" AS (
+         SELECT DISTINCT ON (i."imagen_id") i."id", i."caso_id", i."latencia_ms",
+                i."segunda_opinion_codigo", i."creado_en"
+           FROM "inferencias_ia" i
+          WHERE i."estado_codigo" = 'exitoso' AND i."latencia_ms" IS NOT NULL
+          ORDER BY i."imagen_id", i."creado_en" DESC
+       ), "miembros" AS (
+         SELECT "inferencia_id", sum("latencia_ms") AS "ms"
+           FROM "miembros_inferencia" GROUP BY "inferencia_id"
+       )
+       SELECT c."id" AS "caseId", c."codigo_caso" AS "caseCode",
+              count(*)::int AS "images",
+              sum(u."latencia_ms")::int AS "engineMs",
+              coalesce(sum(m."ms"), 0)::int AS "ensembleMs",
+              CASE WHEN count(t."id") = count(*)
+                   THEN round(extract(epoch FROM max(t."actualizado_en") - min(t."creado_en")) * 1000)::int
+              END AS "wallMs",
+              count(u."segunda_opinion_codigo")::int AS "secondOpinions",
+              min(u."creado_en") AS "analyzedAt"
+         FROM "ultima" u
+         JOIN "casos" c ON c."id" = u."caso_id"
+         LEFT JOIN "miembros" m ON m."inferencia_id" = u."id"
+         LEFT JOIN "trabajos_inferencia" t
+                ON t."inferencia_id" = u."id" AND t."estado_codigo" = 'exitoso'
+        WHERE c."es_sintetico" = false
+          AND ($1::varchar IS NULL OR c."codigo_caso" <= $1)
+        GROUP BY c."id", c."codigo_caso"
+        ORDER BY min(u."creado_en")`,
+      [until],
+    );
+
+    const images = rows.reduce((total, row) => total + row.images, 0);
+    const engineTotal = rows.reduce((total, row) => total + row.engineMs, 0);
+    return {
+      cases: rows.length,
+      images,
+      engine: this.timingStats(rows.map((row) => row.engineMs)),
+      ensemble: this.timingStats(rows.map((row) => row.ensembleMs)),
+      wall: this.timingStats(
+        rows.flatMap((row) => (row.wallMs === null ? [] : [row.wallMs])),
+      ),
+      engineMeanPerImageMs: images === 0 ? null : engineTotal / images,
+      rows: rows.map((row) => ({ ...row, analyzedAt: new Date(row.analyzedAt).toISOString() })),
+    };
+  }
+
   toDto(inference: AiInference): AiInferenceDto {
     return {
       id: inference.id,
@@ -860,6 +933,27 @@ export class InferenceService implements OnModuleInit, OnModuleDestroy {
         })),
       errorMessage: inference.errorMessage,
       createdAt: inference.createdAt.toISOString(),
+    };
+  }
+
+  private timingStats(values: number[]): TimingStatsDto {
+    const sorted = [...values].sort((a, b) => a - b);
+    const n = sorted.length;
+    if (n === 0) {
+      return { meanMs: null, sdMs: null, medianMs: null, p95Ms: null, minMs: null, maxMs: null };
+    }
+    const mean = sorted.reduce((total, value) => total + value, 0) / n;
+    const variance =
+      n < 2 ? null : sorted.reduce((total, value) => total + (value - mean) ** 2, 0) / (n - 1);
+    const middle = Math.floor(n / 2);
+    return {
+      meanMs: mean,
+      sdMs: variance === null ? null : Math.sqrt(variance),
+      // Mediana interpolada, no la de `quantile`: con 30 casos el elemento de más arriba sesga.
+      medianMs: n % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2,
+      p95Ms: this.quantile(sorted, 0.95),
+      minMs: sorted[0]!,
+      maxMs: sorted[n - 1]!,
     };
   }
 

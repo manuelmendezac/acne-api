@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -19,10 +20,15 @@ import type {
   AuthenticatedUser,
 } from 'src/common/interfaces/authenticated-user';
 
-import { ChooseReadingDto, type CaseAnalysisDto, type CaseReadingSelectionDto } from './dto/inference.dto';
+import {
+  ChooseReadingDto,
+  InferenceTimesDto,
+  type CaseAnalysisDto,
+  type CaseReadingSelectionDto,
+} from './dto/inference.dto';
 import type { AiInferenceDto } from './inference.service';
 import { InferenceService } from './inference.service';
-import { AI_VIEWER_ROLES, CONTRAST_ROLES } from 'src/common/domain';
+import { AI_VIEWER_ROLES, ANALYSIS_ROLES, CONTRAST_ROLES } from 'src/common/domain';
 
 /**
  * Covers: OE2 and RF-TR-01.
@@ -190,5 +196,27 @@ export class InferenceController {
   @ApiOperation({ summary: 'Estado de la cola de inferencia por estado de trabajo.' })
   async queueStatus(): Promise<Record<string, number>> {
     return this.inferenceService.queueStatus();
+  }
+
+  @Get('times')
+  @Roles(...ANALYSIS_ROLES)
+  @ApiQuery({
+    name: 'hasta',
+    required: false,
+    type: String,
+    description: 'Último código de caso incluido, p. ej. ACN-2026-0030. Sin él, todos los casos.',
+  })
+  @ApiOperation({
+    summary: 'Tiempo de inferencia por caso: motor completo, solo ensemble y reloj de pared.',
+    description:
+      'Sobre los casos reales analizados, con la última lectura exitosa de cada fotografía. Es ' +
+      'el «tiempo medio de inferencia por caso» de la tesis; los tiempos van en ms.',
+  })
+  async times(@Query('hasta') hasta?: string): Promise<InferenceTimesDto> {
+    const until = hasta?.trim() ?? '';
+    if (until !== '' && !/^[A-Z]{3}-\d{4}-\d{4,}$/.test(until)) {
+      throw new BadRequestException(`«${until}» no es un código de caso (ACN-2026-0030).`);
+    }
+    return this.inferenceService.caseTimes(until === '' ? null : until);
   }
 }
